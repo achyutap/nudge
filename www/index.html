@@ -60,7 +60,7 @@ label{display:block;color:var(--mut);font-size:12px;margin:2px 0 5px}
 const $=s=>document.querySelector(s);
 const LN=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications;
 const PRE=[[0,'None'],[5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[180,'3 hours'],[1440,'1 day']];
-let S=JSON.parse(localStorage.nudge||'null')||{n:100,tasks:[],timer:null,set:{am:true,amT:'09:00',pm:true,pmT:'21:00',pre:15,theme:'',sound:''}};
+let S=JSON.parse(localStorage.nudge||'null')||{n:100,tasks:[],timer:null,set:{am:true,amT:'09:00',pm:true,pmT:'21:00',pre:15,theme:''}};
 let tab='today';
 S.tasks.forEach(t=>{t.st=t.st||t.due;t.cu=t.cu||[]});
 const sod=t=>{const d=new Date(t);d.setHours(0,0,0,0);return d.getTime()};
@@ -80,15 +80,10 @@ const showSheet=h=>{$('#sh').innerHTML=h;$('#bd').style.display='flex'};
 const hideSheet=()=>$('#bd').style.display='none';
 function theme(){document.documentElement.dataset.t=S.set.theme||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
 
-function chId(){return 'tasks_'+(S.set.sound||'default')}
-async function ensureChannel(){
-  if(!LN)return;
-  try{await LN.createChannel({id:chId(),name:'Task reminders',importance:5,visibility:1,vibration:true,...(S.set.sound?{sound:S.set.sound+'.wav'}:{})})}catch(e){}
-}
 async function initN(){
   if(!LN)return;
   try{
-    await ensureChannel();
+    await LN.createChannel({id:'tasks',name:'Task reminders',importance:5,visibility:1,vibration:true});
     const r=await LN.checkPermissions();if(r.display!=='granted')await LN.requestPermissions();
   }catch(e){}
   sync();
@@ -98,8 +93,8 @@ async function sync(){
   try{
     const p=await LN.getPending();
     if(p.notifications.length)await LN.cancel({notifications:p.notifications.map(x=>({id:x.id}))});
-    const now=Date.now(),L=[],pend=S.tasks.filter(t=>!t.done),CH=chId();
-    const add=(id,at,title,body)=>{if(at>now)L.push({id,title,body,channelId:CH,schedule:{at:new Date(at),allowWhileIdle:true}})};
+    const now=Date.now(),L=[],pend=S.tasks.filter(t=>!t.done);
+    const add=(id,at,title,body)=>{if(at>now)L.push({id,title,body,channelId:'tasks',schedule:{at:new Date(at),allowWhileIdle:true}})};
     pend.forEach(t=>{
       const b=t.id*100;
       if(t.pre>0)add(b+1,t.st-t.pre*6e4,'Starting soon: '+t.title,'Starts in '+fm(t.pre));
@@ -110,7 +105,7 @@ async function sync(){
     if(S.timer)add(S.timer.id*100+4,S.timer.end,'Timer finished','"'+S.timer.title+'" - nice work');
     const k=pend.length,body=k?k+' task'+(k>1?'s':'')+' pending. Take a look.':'Nothing pending. Plan something?';
     [['am',1,'Good morning'],['pm',2,'Evening check-in']].forEach(([key,id,ti])=>{
-      if(S.set[key]){const[h,m]=S.set[key+'T'].split(':').map(Number);L.push({id,title:ti,body,channelId:CH,schedule:{on:{hour:h,minute:m},allowWhileIdle:true}})}
+      if(S.set[key]){const[h,m]=S.set[key+'T'].split(':').map(Number);L.push({id,title:ti,body,channelId:'tasks',schedule:{on:{hour:h,minute:m},allowWhileIdle:true}})}
     });
     if(L.length)await LN.schedule({notifications:L});
   }catch(e){console.log(e)}
@@ -204,15 +199,12 @@ function settings(){
 <div class="tg"><span>Evening check-in</span><input type="time" value="${s.pmT}" onchange="S.set.pmT=this.value;save()"><input type="checkbox" ${s.pm?'checked':''} onchange="S.set.pm=this.checked;save()"></div>
 <label>Default remind-before</label><select onchange="S.set.pre=+this.value;save()">${opt(PRE,s.pre)}</select>
 <label>Theme</label><select onchange="S.set.theme=this.value;save();theme()">${opt([['','Auto'],['dark','Dark'],['light','Light']],s.theme)}</select>
-<label>Notification sound</label><select onchange="S.set.sound=this.value;save();ensureChannel();sync()">${opt([['','Default'],['chime','Chime'],['ping','Ping'],['gentle','Gentle']],s.sound)}</select>
-<p class="empty" style="margin:0 0 10px;font-size:12px;text-align:left">Android can't play video (mp4) as a notification sound, only short audio clips - pick one above.</p>
 <button class="btn" style="width:100%" onclick="test()">Send test notification</button>
 <p class="empty" style="margin:14px 0 0;font-size:12px">Late reminders? Phone Settings > Apps > Nudge > Battery > Unrestricted.</p>`);
 }
 async function test(){
   if(!LN)return toast('Works in the phone app only');
-  await ensureChannel();
-  await LN.schedule({notifications:[{id:9,title:'Nudge works',body:'Reminders are set up.',channelId:chId(),schedule:{at:new Date(Date.now()+5e3),allowWhileIdle:true}}]});
+  await LN.schedule({notifications:[{id:9,title:'Nudge works',body:'Reminders are set up.',channelId:'tasks',schedule:{at:new Date(Date.now()+5e3),allowWhileIdle:true}}]});
   hideSheet();toast('Close the app. Arrives in 5 s');
 }
 
