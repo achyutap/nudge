@@ -16,15 +16,11 @@ jobs:
           java-version: 17
       - run: npm install
       - run: npx cap add android
-      - name: Bundle notification sounds
-        run: |
-          mkdir -p android/app/src/main/res/raw
-          cp assets/sounds/*.wav android/app/src/main/res/raw/ 2>/dev/null || true
       - name: Permissions and theme colors
         run: |
           M=android/app/src/main/AndroidManifest.xml
           sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/><uses-permission android:name="android.permission.USE_EXACT_ALARM"/><uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/><uses-permission android:name="android.permission.VIBRATE"/>\n<application#' $M
-          sed -i 's/#303F9F/#111318/;s/#3F51B5/#111318/' android/app/src/main/res/values/colors.xml
+          sed -i 's/#303F9F/#111318/;s/#3F51B5/#111318/' android/app/src/main/res/values/colors.xml || true
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
