@@ -35,13 +35,23 @@ label{display:block;color:var(--mut);font-size:12px;margin:2px 0 5px}
 .tg{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.tg input[type=time]{width:120px;margin:0}.tg span{flex:1}
 .empty{text-align:center;color:var(--mut);margin-top:60px}
 #ts{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:14px;display:none;font-weight:600}
+.tabs button{padding:10px 2px;font-size:14px}
+.dn{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.dn b{font-size:17px}.dn .tb{font-size:20px;padding:4px 16px}
+.tl{position:relative;background:var(--card);border-radius:20px;box-shadow:var(--sh);overflow:hidden}
+.hr{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.hr span{position:absolute;top:4px;left:10px;font-size:11px;color:var(--mut)}
+.bk{position:absolute;border-radius:10px;border-left:4px solid var(--acc);background:var(--accS);padding:4px 8px;overflow:hidden;line-height:1.25}
+.bk b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bk small{color:var(--mut);font-size:11px}
+.q1{border-left-color:#d6b25e;background:rgba(214,178,94,.2)}.q2{border-left-color:var(--warn);background:rgba(224,138,114,.2)}
+.dn2{opacity:.45}.nw{position:absolute;left:44px;right:0;border-top:2px solid var(--warn);z-index:2}
+.cu{display:flex;gap:8px}.cu input{margin:0 0 8px}.cu button{flex:none;width:44px;border:0;border-radius:14px;background:var(--accS);color:var(--warn);font-size:18px;margin-bottom:8px}
+.add{width:100%;border:1px dashed var(--line);background:none;color:var(--acc);border-radius:14px;padding:11px;font:inherit;font-weight:600;margin-bottom:12px}
 @keyframes up{from{opacity:0;transform:translateY(14px)}}
 </style></head><body>
 <div class="w">
 <header><div><small id="dt"></small><h1>Nudge</h1></div>
 <button class="g" onclick="settings()" aria-label="Settings"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button></header>
 <div id="bn"><span id="bt"></span><button class="tb" onclick="S.timer=null;save();tk()">Stop</button></div>
-<div class="tabs"><button data-t="today" onclick="setTab('today')">Today</button><button data-t="up" onclick="setTab('up')">Upcoming</button><button data-t="done" onclick="setTab('done')">Done</button></div>
+<div class="tabs"><button data-t="today" onclick="setTab('today')">Today</button><button data-t="up" onclick="setTab('up')">Upcoming</button><button data-t="tl" onclick="setTab('tl')">Timeline</button><button data-t="done" onclick="setTab('done')">Done</button></div>
 <div id="list"></div></div>
 <button class="fab" onclick="edit(0)" aria-label="Add task">+</button>
 <div class="bd" id="bd" onclick="if(event.target==this)hideSheet()"><div class="sh" id="sh"></div></div>
@@ -50,8 +60,14 @@ label{display:block;color:var(--mut);font-size:12px;margin:2px 0 5px}
 const $=s=>document.querySelector(s);
 const LN=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications;
 const PRE=[[0,'None'],[5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[180,'3 hours'],[1440,'1 day']];
-let S=JSON.parse(localStorage.nudge||'null')||{n:100,tasks:[],timer:null,set:{am:true,amT:'09:00',pm:true,pmT:'21:00',pre:15,theme:''}};
+let S=JSON.parse(localStorage.nudge||'null')||{n:100,tasks:[],timer:null,set:{am:true,amT:'09:00',pm:true,pmT:'21:00',pre:15,theme:'',sound:''}};
 let tab='today';
+S.tasks.forEach(t=>{t.st=t.st||t.due;t.cu=t.cu||[]});
+const sod=t=>{const d=new Date(t);d.setHours(0,0,0,0);return d.getTime()};
+const tm=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+const rng=t=>sod(t.st)==sod(t.due)?fd(t.st)+' – '+tm(t.due):fd(t.st)+' – '+fd(t.due);
+const rl=t=>{const n=Date.now();return n<t.st?'starts '+rel(t.st):n<t.due?'ongoing':rel(t.due)};
+let tdy=sod(Date.now()),CU=[];
 const save=()=>{localStorage.nudge=JSON.stringify(S);sync()};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const opt=(a,sel)=>a.map(([v,l])=>`<option value="${v}" ${String(v)==String(sel)?'selected':''}>${l}</option>`).join('');
@@ -64,10 +80,15 @@ const showSheet=h=>{$('#sh').innerHTML=h;$('#bd').style.display='flex'};
 const hideSheet=()=>$('#bd').style.display='none';
 function theme(){document.documentElement.dataset.t=S.set.theme||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark')}
 
+function chId(){return 'tasks_'+(S.set.sound||'default')}
+async function ensureChannel(){
+  if(!LN)return;
+  try{await LN.createChannel({id:chId(),name:'Task reminders',importance:5,visibility:1,vibration:true,...(S.set.sound?{sound:S.set.sound+'.wav'}:{})})}catch(e){}
+}
 async function initN(){
   if(!LN)return;
   try{
-    await LN.createChannel({id:'tasks',name:'Task reminders',importance:5,visibility:1,vibration:true});
+    await ensureChannel();
     const r=await LN.checkPermissions();if(r.display!=='granted')await LN.requestPermissions();
   }catch(e){}
   sync();
@@ -77,48 +98,82 @@ async function sync(){
   try{
     const p=await LN.getPending();
     if(p.notifications.length)await LN.cancel({notifications:p.notifications.map(x=>({id:x.id}))});
-    const now=Date.now(),L=[],pend=S.tasks.filter(t=>!t.done);
-    const add=(id,at,title,body)=>{if(at>now)L.push({id,title,body,channelId:'tasks',schedule:{at:new Date(at),allowWhileIdle:true}})};
+    const now=Date.now(),L=[],pend=S.tasks.filter(t=>!t.done),CH=chId();
+    const add=(id,at,title,body)=>{if(at>now)L.push({id,title,body,channelId:CH,schedule:{at:new Date(at),allowWhileIdle:true}})};
     pend.forEach(t=>{
-      if(t.pre>0)add(t.id*10+1,t.due-t.pre*6e4,'Coming up: '+t.title,'Due in '+fm(t.pre));
-      add(t.id*10+2,t.due,'Due now: '+t.title,t.note||'Time to get this done');
+      const b=t.id*100;
+      if(t.pre>0)add(b+1,t.st-t.pre*6e4,'Starting soon: '+t.title,'Starts in '+fm(t.pre));
+      add(b+2,t.st,'Start now: '+t.title,t.note||'Time to begin');
+      t.cu.slice(0,20).forEach((c,i)=>add(b+10+i,c.at,t.title,c.m||'Check-in'));
+      add(b+3,t.due,'Time is up: '+t.title,'Scheduled time has ended');
     });
-    if(S.timer)add(S.timer.id*10+3,S.timer.end,'Timer finished','"'+S.timer.title+'" - nice work');
+    if(S.timer)add(S.timer.id*100+4,S.timer.end,'Timer finished','"'+S.timer.title+'" - nice work');
     const k=pend.length,body=k?k+' task'+(k>1?'s':'')+' pending. Take a look.':'Nothing pending. Plan something?';
     [['am',1,'Good morning'],['pm',2,'Evening check-in']].forEach(([key,id,ti])=>{
-      if(S.set[key]){const[h,m]=S.set[key+'T'].split(':').map(Number);L.push({id,title:ti,body,channelId:'tasks',schedule:{on:{hour:h,minute:m},allowWhileIdle:true}})}
+      if(S.set[key]){const[h,m]=S.set[key+'T'].split(':').map(Number);L.push({id,title:ti,body,channelId:CH,schedule:{on:{hour:h,minute:m},allowWhileIdle:true}})}
     });
     if(L.length)await LN.schedule({notifications:L});
   }catch(e){console.log(e)}
 }
 
 function render(){
+  if(tab=='tl')return tline();
   const eod=new Date();eod.setHours(23,59,59,999);
-  const f={today:t=>!t.done&&t.due<=eod,up:t=>!t.done&&t.due>eod,done:t=>t.done}[tab];
-  const L=S.tasks.filter(f).sort((a,b)=>a.due-b.due);
-  $('#list').innerHTML=L.length?L.map(t=>`<div class="c" onclick="edit(${t.id})"><div class="ck ${t.done?'on':''}" onclick="event.stopPropagation();done(${t.id})"></div><div class="mid"><b>${esc(t.title)}</b><small class="${!t.done&&t.due<Date.now()?'od':''}">${fd(t.due)}${t.done?'':' · '+rel(t.due)}${t.rep?' · repeats':''}</small></div><span class="p p${t.pr}"></span>${t.done?'':`<button class="tb" onclick="event.stopPropagation();tsheet(${t.id})">Timer</button>`}</div>`).join(''):'<p class="empty">Nothing here.<br>Tap + to add a task.</p>';
+  const f={today:t=>!t.done&&t.st<=eod,up:t=>!t.done&&t.st>eod,done:t=>t.done}[tab];
+  const L=S.tasks.filter(f).sort((a,b)=>a.st-b.st);
+  $('#list').innerHTML=L.length?L.map(t=>`<div class="c" onclick="edit(${t.id})"><div class="ck ${t.done?'on':''}" onclick="event.stopPropagation();done(${t.id})"></div><div class="mid"><b>${esc(t.title)}</b><small class="${!t.done&&t.due<Date.now()?'od':''}">${rng(t)}${t.done?'':' · '+rl(t)}${t.rep?' · repeats':''}</small></div><span class="p p${t.pr}"></span>${t.done?'':`<button class="tb" onclick="event.stopPropagation();tsheet(${t.id})">Timer</button>`}</div>`).join(''):'<p class="empty">Nothing here.<br>Tap + to add a task.</p>';
 }
-function setTab(t){tab=t;document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));render()}
+function tline(){
+  const H=56,a=tdy,z=a+864e5;
+  const L=S.tasks.filter(t=>t.st<z&&t.due>a).map(t=>({t,s:Math.max(t.st,a),e:Math.min(t.due,z)})).sort((x,y)=>x.s-y.s);
+  let cur=null,mx=0;
+  L.forEach(b=>{
+    if(!cur||b.s>=mx){cur={cols:[]};mx=0}
+    let c=cur.cols.findIndex(e=>e<=b.s);if(c<0){c=cur.cols.length;cur.cols.push(0)}
+    cur.cols[c]=b.e;b.c=c;b.g=cur;mx=Math.max(mx,b.e);
+  });
+  let h=`<div class="dn"><button class="tb" onclick="nd(-1)">‹</button><b>${new Date(a).toLocaleDateString([],{weekday:'long',day:'numeric',month:'short'})}</b><button class="tb" onclick="nd(1)">›</button></div><div class="tl" id="tl" style="height:${24*H}px">`;
+  for(let i=0;i<24;i++)h+=`<div class="hr" style="top:${i*H}px"><span>${i%12||12}${i<12?'a':'p'}</span></div>`;
+  L.forEach(b=>{const w=100/b.g.cols.length,t=b.t;
+    h+=`<div class="bk q${t.pr} ${t.done?'dn2':''}" style="top:${(b.s-a)/36e5*H}px;height:${Math.max((b.e-b.s)/36e5*H,24)}px;left:calc(48px + (100% - 52px)*${b.c*w/100});width:calc((100% - 52px)*${w/100} - 3px)" onclick="edit(${t.id})"><b>${esc(t.title)}</b><small>${tm(t.st)}–${tm(t.due)}</small></div>`});
+  const n=Date.now();if(n>=a&&n<z)h+=`<div class="nw" style="top:${(n-a)/36e5*H}px"></div>`;
+  $('#list').innerHTML=h+'</div>';
+}
+function fTl(){
+  const n=Date.now(),a=tdy,f=a==sod(n)?n:(S.tasks.filter(t=>t.st>=a&&t.st<a+864e5).map(t=>t.st).sort((x,y)=>x-y)[0]||a+8*36e5);
+  window.scrollTo(0,Math.max(0,$('#tl').offsetTop+(f-a)/36e5*56-140));
+}
+function nd(n){const d=new Date(tdy);d.setDate(d.getDate()+n);tdy=d.getTime();render();fTl()}
+function setTab(t){tab=t;document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));render();if(t=='tl')fTl()}
 function done(id){
   const t=S.tasks.find(x=>x.id==id);
-  if(t.rep&&!t.done){while(t.due<=Date.now())t.due+=t.rep*864e5;toast('Next: '+fd(t.due))}else t.done=!t.done;
+  if(t.rep&&!t.done){const d=t.rep*864e5;do{t.st+=d;t.due+=d;t.cu.forEach(c=>c.at+=d)}while(t.due<=Date.now());toast('Next: '+fd(t.st))}else t.done=!t.done;
   save();render();
 }
+function rcu(){$('#cl').innerHTML=CU.map((c,i)=>`<div class="cr"><div class="cu"><input type="datetime-local" value="${lv(c.at)}" onchange="CU[${i}].at=new Date(this.value).getTime()"><button onclick="CU.splice(${i},1);rcu()">×</button></div><input placeholder="Message (optional)" value="${esc(c.m||'')}" onchange="CU[${i}].m=this.value"></div>`).join('')}
+function addC(){const s=new Date($('#f3').value).getTime(),e=new Date($('#f7').value).getTime();CU.push({at:Math.round((s+e)/12e4)*6e4||Date.now()+36e5,m:''});rcu()}
 function edit(id){
-  const t=S.tasks.find(x=>x.id==id)||{title:'',note:'',due:Date.now()+36e5,pre:S.set.pre,pr:1,rep:0};
+  const t=S.tasks.find(x=>x.id==id)||(()=>{let s;if(tab=='tl'&&tdy!=sod(Date.now()))s=tdy+9*36e5;else{const d=new Date();d.setHours(d.getHours()+1,0,0,0);s=d.getTime()}return{title:'',note:'',st:s,due:s+36e5,pre:S.set.pre,pr:1,rep:0,cu:[]}})();
+  CU=t.cu.map(c=>({...c}));
   showSheet(`<h3>${id?'Edit task':'New task'}</h3>
 <input id="f1" placeholder="What needs doing?" value="${esc(t.title)}">
 <input id="f2" placeholder="Note (optional)" value="${esc(t.note||'')}">
-<label>Deadline</label><input id="f3" type="datetime-local" value="${lv(t.due)}">
-<div class="row"><div><label>Remind before</label><select id="f4">${opt(PRE,t.pre)}</select></div><div><label>Priority</label><select id="f5">${opt([[0,'Low'],[1,'Medium'],[2,'High']],t.pr)}</select></div></div>
+<label>Starts</label><input id="f3" type="datetime-local" value="${lv(t.st)}">
+<label>Ends</label><input id="f7" type="datetime-local" value="${lv(t.due)}">
+<div class="row"><div><label>Remind before start</label><select id="f4">${opt(PRE,t.pre)}</select></div><div><label>Priority</label><select id="f5">${opt([[0,'Low'],[1,'Medium'],[2,'High']],t.pr)}</select></div></div>
+<label>Custom reminders (between start and end)</label><div id="cl"></div><button class="add" onclick="addC()">+ Add custom reminder</button>
 <label>Repeat</label><select id="f6">${opt([[0,'Never'],[1,'Daily'],[7,'Weekly']],t.rep)}</select>
 <div class="row"><button class="btn" onclick="saveT(${id})">Save</button>${id?`<button class="btn ghost" onclick="delT(${id})">Delete</button>`:''}</div>`);
+  rcu();
 }
 function saveT(id){
   const title=$('#f1').value.trim();if(!title)return toast('Add a title');
-  const d=new Date($('#f3').value).getTime();if(!d)return toast('Pick a deadline');
+  const s=new Date($('#f3').value).getTime(),e=new Date($('#f7').value).getTime();
+  if(!s||!e)return toast('Pick start and end');
+  if(e<=s)return toast('End must be after start');
+  if(CU.some(c=>!(c.at>=s&&c.at<=e)))return toast('Reminders must be between start and end');
   let t=S.tasks.find(x=>x.id==id);if(!t){t={id:S.n++,done:false};S.tasks.push(t)}
-  Object.assign(t,{title,note:$('#f2').value.trim(),due:d,pre:+$('#f4').value,pr:+$('#f5').value,rep:+$('#f6').value});
+  Object.assign(t,{title,note:$('#f2').value.trim(),st:s,due:e,cu:CU.map(c=>({at:c.at,m:(c.m||'').trim()})).sort((x,y)=>x.at-y.at),pre:+$('#f4').value,pr:+$('#f5').value,rep:+$('#f6').value});
   hideSheet();save();render();
 }
 function delT(id){S.tasks=S.tasks.filter(x=>x.id!=id);if(S.timer&&S.timer.id==id)S.timer=null;hideSheet();save();render();tk()}
@@ -149,12 +204,15 @@ function settings(){
 <div class="tg"><span>Evening check-in</span><input type="time" value="${s.pmT}" onchange="S.set.pmT=this.value;save()"><input type="checkbox" ${s.pm?'checked':''} onchange="S.set.pm=this.checked;save()"></div>
 <label>Default remind-before</label><select onchange="S.set.pre=+this.value;save()">${opt(PRE,s.pre)}</select>
 <label>Theme</label><select onchange="S.set.theme=this.value;save();theme()">${opt([['','Auto'],['dark','Dark'],['light','Light']],s.theme)}</select>
+<label>Notification sound</label><select onchange="S.set.sound=this.value;save();ensureChannel();sync()">${opt([['','Default'],['chime','Chime'],['ping','Ping'],['gentle','Gentle']],s.sound)}</select>
+<p class="empty" style="margin:0 0 10px;font-size:12px;text-align:left">Android can't play video (mp4) as a notification sound, only short audio clips - pick one above.</p>
 <button class="btn" style="width:100%" onclick="test()">Send test notification</button>
 <p class="empty" style="margin:14px 0 0;font-size:12px">Late reminders? Phone Settings > Apps > Nudge > Battery > Unrestricted.</p>`);
 }
 async function test(){
   if(!LN)return toast('Works in the phone app only');
-  await LN.schedule({notifications:[{id:9,title:'Nudge works',body:'Reminders are set up.',channelId:'tasks',schedule:{at:new Date(Date.now()+5e3),allowWhileIdle:true}}]});
+  await ensureChannel();
+  await LN.schedule({notifications:[{id:9,title:'Nudge works',body:'Reminders are set up.',channelId:chId(),schedule:{at:new Date(Date.now()+5e3),allowWhileIdle:true}}]});
   hideSheet();toast('Close the app. Arrives in 5 s');
 }
 
